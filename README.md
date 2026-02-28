@@ -1,0 +1,529 @@
+# Warden
+
+**Authorization, policy enforcement, and threat protection for AI agents with wallets.**
+
+```bash
+pip install warden
+```
+
+---
+
+## Why Warden
+
+AI agents are increasingly autonomous. They have wallets. They call APIs. They move money. And right now, there's no authorization layer standing between an agent and the damage it can cause — whether from a bug, a bad prompt, or an active attack.
+
+Warden is a thin interception layer that sits between your agent and its capabilities. Every action passes through a local policy engine before it executes. No policy engine in the cloud. No latency on individual decisions. No black box.
+
+```
+Agent attempts action
+        │
+        ▼
+┌───────────────────────────────────┐
+│         Warden                │
+│                                   │
+│  ✓ Action within permitted scope? │
+│  ✓ Spend within budget limits?    │
+│  ✓ Recipient on approved list?    │
+│  ✓ Within operating hours?        │
+│  ✓ Below escalation threshold?    │
+│  ✗ Matches known attack pattern?  │
+│  ✗ Prompt injection signature?    │
+└───────────────────────────────────┘
+        │
+        ├── ALLOW  → action proceeds
+        ├── ESCALATE → human approval required
+        └── DENY   → blocked, logged, alert sent
+```
+
+---
+
+## Install
+
+```bash
+pip install warden
+```
+
+Python 3.9+ supported.
+
+---
+
+## Quickstart
+
+**1. Write a policy file (`policy.yaml`):**
+
+```yaml
+agent_id: my-trading-bot
+
+permissions:
+  - action: token_transfer
+    constraints:
+      tokens: [USDC, USDT]
+      max_amount_per_tx: 1000
+      approved_recipients:
+        - "0xYourTreasuryAddress"
+
+budgets:
+  per_transaction: 1000
+  daily: 10000
+
+schedule:
+  timezone: UTC
+  active_windows:
+    - days: [mon, tue, wed, thu, fri]
+      hours: "07:00-22:00"
+  outside_hours_action: deny
+```
+
+**2. Protect your agent:**
+
+```python
+from agentguard import Warden
+
+guard = Warden(policy="policy.yaml")
+
+# Check any action before executing it
+result = guard.check(
+    action="token_transfer",
+    params={"recipient": "0xABC...", "amount": 500, "token": "USDC"}
+)
+
+if result.allowed:
+    execute_transfer(...)
+else:
+    print(f"Blocked: {result.reason}")
+```
+
+**3. Or use the decorator:**
+
+```python
+from agentguard import guard
+
+@guard(policy="policy.yaml")
+def transfer_funds(recipient: str, amount: float, token: str):
+    execute_transfer(recipient, amount, token)
+```
+
+That's it. Your agent is protected.
+
+---
+
+## Framework Integrations
+
+### LangChain
+
+```python
+from agentguard.langchain import GuardedToolkit
+from langchain.agents import initialize_agent
+
+guard = GuardedToolkit(policy="policy.yaml")
+tools = guard.wrap(original_tools)  # Wraps each tool with policy enforcement
+
+agent = initialize_agent(tools=tools, llm=llm, ...)
+```
+
+Any tool call that violates the policy is blocked before LangChain executes it.
+
+### CrewAI
+
+```python
+from agentguard.crewai import GuardedAgent
+from crewai import Task, Crew
+
+agent = GuardedAgent(
+    role="Financial Analyst",
+    goal="Process invoices and make approved payments",
+    policy="policy.yaml",
+    tools=[transfer_tool, query_tool]
+)
+
+crew = Crew(agents=[agent], tasks=[...])
+crew.kickoff()
+```
+
+### Generic Python Decorator
+
+```python
+from agentguard import guard
+
+@guard(policy="policy.yaml", action_type="api_call")
+def call_external_api(url: str, payload: dict):
+    return requests.post(url, json=payload)
+
+@guard(policy="policy.yaml", action_type="token_transfer")
+def send_payment(recipient: str, amount: float):
+    wallet.transfer(recipient, amount)
+```
+
+### HTTP Proxy (any language, any framework)
+
+```bash
+export HTTPS_PROXY=https://proxy.warden.dev
+export AGENTGUARD_AGENT_ID=my-agent
+export AGENTGUARD_API_KEY=your-key
+
+# All outbound HTTP from your agent now passes through Warden
+python my_agent.py
+```
+
+---
+
+## Policy Reference
+
+Policies are YAML files. All fields are optional — include only what you need.
+
+### Permissions
+
+```yaml
+permissions:
+  # Control which action types are allowed at all
+  - action: token_transfer
+    constraints:
+      tokens: [USDC, USDT, ETH]           # Allowed tokens
+      max_amount_per_tx: 5000              # Max per transaction
+      approved_recipients:                 # Allowlist of recipients
+        - "0x..."
+        - "0x..."
+      blocked_recipients:                  # Denylist (checked against threat feed)
+        - "0x..."
+
+  - action: swap
+    constraints:
+      approved_dexes: [uniswap, jupiter, curve]
+      max_slippage_bps: 100               # Max 1% slippage
+      max_value_usd: 10000
+
+  - action: api_call
+    constraints:
+      allowed_domains:
+        - "*.openai.com"
+        - "api.coingecko.com"
+      blocked_domains:
+        - "*.warden.dev/threats"       # Auto-updated malicious domain list
+
+  - action: contract_call
+    constraints:
+      approved_contracts:
+        - "0x..."                         # Only these contracts
+      first_interaction_requires_approval: true
+```
+
+### Budgets
+
+```yaml
+budgets:
+  per_transaction: 1000       # Max any single transaction
+  hourly: 5000                # Rolling 1-hour window
+  daily: 20000                # Rolling 24-hour window
+  monthly: 200000             # Rolling 30-day window
+  # When any limit is hit: deny until window resets
+```
+
+### Escalation (Human-in-the-Loop)
+
+```yaml
+escalation:
+  triggers:
+    - amount_above: 5000                    # Ask human for large transactions
+    - recipient_not_in_approved_list: true  # Ask for unknown recipients
+    - first_interaction_with_contract: true # Ask before touching new contracts
+    - budget_remaining_pct_below: 20        # Ask when budget is nearly exhausted
+
+  approval_channels:
+    - slack: "#agent-approvals"
+    - email: ["owner@example.com"]
+    - webhook: "https://your-app.com/agent/approve"
+
+  timeout_minutes: 30
+  timeout_action: deny    # deny | allow (deny is safer default)
+```
+
+### Schedule
+
+```yaml
+schedule:
+  timezone: "America/New_York"
+  active_windows:
+    - days: [mon, tue, wed, thu, fri]
+      hours: "08:00-20:00"
+    - days: [sat]
+      hours: "10:00-16:00"
+  outside_hours_action: deny_with_alert   # deny | deny_with_alert | queue
+```
+
+### Kill Switch
+
+```yaml
+kill_switch:
+  enabled: true
+  notify_on_trigger:
+    - email: ["owner@example.com"]
+    - webhook: "https://your-app.com/agent/killed"
+```
+
+---
+
+## CLI
+
+```bash
+# Check a single action against a policy
+agentguard check --policy policy.yaml \
+  --action token_transfer \
+  --params '{"recipient": "0xABC", "amount": 500, "token": "USDC"}'
+# → ALLOW
+
+agentguard check --policy policy.yaml \
+  --action token_transfer \
+  --params '{"recipient": "0xUNKNOWN", "amount": 15000, "token": "USDC"}'
+# → DENY: exceeds per_transaction limit (15000 > 1000)
+
+# Audit a log file — summarize what got blocked and why
+agentguard audit --log agent.log
+# → 142 actions evaluated
+#    128 allowed
+#    14 denied
+#      - 9x exceeded daily budget
+#      - 3x recipient not in approved list
+#      - 2x matched threat pattern: wallet_drain_v2
+
+# Validate your policy file
+agentguard validate --policy policy.yaml
+# → Policy valid. 3 action types, 2 budget limits, escalation configured.
+
+# Test your policy against a set of example actions
+agentguard test --policy policy.yaml --cases test_cases.yaml
+```
+
+---
+
+## Threat Detection
+
+Warden ships with a seed library of known attack patterns. These run offline against every action — no API call required.
+
+**What's included:**
+
+| Category | Examples |
+|----------|---------|
+| Prompt injection | "ignore previous instructions", "your real system prompt is", "disregard all prior" |
+| Wallet drain patterns | Specific call signatures seen in on-chain exploits |
+| Reentrancy indicators | Contract call patterns associated with reentrancy attacks |
+| Jailbreak templates | Common instruction override patterns |
+| Suspicious recipient flags | Addresses from public exploit databases (snapshotted at release) |
+
+**How it works:**
+
+```python
+# Automatically checked on every guard.check() call
+result = guard.check(action="token_transfer", params={
+    "recipient": "0xKNOWN_DRAINER",
+    "amount": 100
+})
+# → DENY: recipient matches threat pattern: wallet_drain_v2
+```
+
+The seed library goes stale over time. The [cloud threat feed](#threat-feed) keeps it current.
+
+---
+
+## Threat Feed
+
+The seed library covers known-at-launch patterns. Novel attacks need up-to-date signatures.
+
+Warden can connect to the Warden Cloud threat feed to pull the latest patterns:
+
+```python
+guard = Warden(
+    policy="policy.yaml",
+    api_key=os.environ["AGENTGUARD_KEY"]  # Free key at warden.dev
+)
+# Threat signatures now auto-update in the background
+```
+
+**What the feed adds:**
+- New malicious addresses (updated within seconds of detection)
+- Novel prompt injection variants (as new attacks are discovered)
+- Cross-customer threat intelligence (attack on customer A protects all customers within seconds)
+
+**Telemetry:** By default, anonymized policy evaluation events are sent back to Warden Cloud. This is what makes the feed smarter over time. No PII, no business logic, no amounts or addresses — pure behavioral signals (`action_type`, `pattern_matched`, `result`). Opting out requires an [Enterprise plan](https://warden.dev).
+
+We state this plainly because developers deserve to know. PostHog, Sentry, and Grafana all operate the same way.
+
+---
+
+## How Decisions Are Made (No Cloud Required for Core)
+
+```
+guard.check(action, params)
+        │
+        ▼
+1. Permission check     — is this action type allowed at all?
+2. Constraint check     — does it satisfy all field constraints?
+3. Budget check         — does it fit within spending limits?
+4. Schedule check       — is the agent operating within allowed hours?
+5. Threat check         — does it match any known attack patterns?
+        │
+        ▼
+Decision made locally. No API call. No latency added to your critical path.
+        │
+        ▼
+Telemetry event queued (async, non-blocking)
+        │
+        ▼ (background, every N minutes)
+Pull fresh threat signatures from cloud (if api_key configured)
+```
+
+Steps 1–5 run entirely on your machine. The cloud is never in your critical path.
+
+---
+
+## Audit Logging
+
+Every decision is logged with full context:
+
+```json
+{
+  "timestamp": "2025-03-01T14:23:01Z",
+  "agent_id": "my-trading-bot",
+  "action": "token_transfer",
+  "params": { "token": "USDC", "amount": 500 },
+  "result": "allow",
+  "checks_passed": ["permission", "constraint", "budget", "schedule", "threat"],
+  "latency_ms": 0.4
+}
+```
+
+```json
+{
+  "timestamp": "2025-03-01T14:25:17Z",
+  "agent_id": "my-trading-bot",
+  "action": "token_transfer",
+  "params": { "token": "USDC", "amount": 15000 },
+  "result": "deny",
+  "reason": "exceeds_daily_budget",
+  "daily_spent": 18500,
+  "daily_limit": 20000,
+  "latency_ms": 0.3
+}
+```
+
+Logs write to stdout (structured JSON) or a file. Use `agentguard audit` to summarize them.
+
+---
+
+## Examples
+
+### Trading Bot (Solana)
+
+```python
+from agentguard import Warden
+from solana_agent_kit import SolanaAgentKit
+
+guard = Warden(policy="trading_policy.yaml", api_key=os.environ["AGENTGUARD_KEY"])
+
+def protected_swap(input_token, output_token, amount):
+    result = guard.check("swap", {
+        "input_token": input_token,
+        "output_token": output_token,
+        "amount_usd": amount
+    })
+    if not result.allowed:
+        raise PermissionError(f"Warden: {result.reason}")
+    return agent.swap(input_token, output_token, amount)
+```
+
+### Invoice Processing Agent (LangChain)
+
+```python
+from agentguard.langchain import GuardedToolkit
+from langchain.agents import initialize_agent, AgentType
+
+tools = [TransferTool(), QueryInvoiceTool(), ApproveVendorTool()]
+guard = GuardedToolkit(policy="invoice_policy.yaml")
+safe_tools = guard.wrap(tools)
+
+agent = initialize_agent(
+    tools=safe_tools,
+    llm=llm,
+    agent=AgentType.OPENAI_FUNCTIONS
+)
+
+# The agent can now only pay approved vendors, within configured limits
+agent.run("Process all pending invoices from approved vendors")
+```
+
+### Multi-Agent Workflow (CrewAI)
+
+```python
+from agentguard.crewai import GuardedAgent
+
+researcher = GuardedAgent(
+    role="Researcher",
+    policy="researcher_policy.yaml",  # Read-only, no spend
+    tools=[search_tool, read_tool]
+)
+
+executor = GuardedAgent(
+    role="Executor",
+    policy="executor_policy.yaml",    # Can spend, strict limits
+    tools=[transfer_tool, swap_tool]
+)
+
+# Each agent has its own policy — a compromised researcher can't trigger payments
+```
+
+---
+
+## Roadmap
+
+**v0.1 (launch)**
+- [x] Policy engine core
+- [x] Python decorator
+- [x] LangChain integration
+- [x] CrewAI integration
+- [x] Seed threat library
+- [x] CLI (`check`, `audit`, `validate`)
+- [x] Structured audit logging
+
+**v0.2 (after 500 ⭐)**
+- [ ] Real-time threat feed
+- [ ] Kill switch API (`guard.kill()`, `guard.pause()`)
+- [ ] Web dashboard
+- [ ] Slack / email alerting
+- [ ] Anomaly detection
+
+**v0.3**
+- [ ] Team + org management
+- [ ] SSO / SAML
+- [ ] Compliance reports (SOC2, GDPR)
+- [ ] On-prem threat feed cache
+
+---
+
+## Contributing
+
+Warden is MIT licensed. Contributions welcome.
+
+```bash
+git clone https://github.com/dribel792/warden
+cd agentguard
+pip install -e ".[dev]"
+pytest
+```
+
+When adding new threat patterns to the seed library, include a reference to the original attack (CVE, on-chain tx, blog post, etc.).
+
+---
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+The threat feed (Layer 2+) is a separate cloud service. The core policy engine in this repo is free, open source, and runs entirely locally.
+
+---
+
+## Links
+
+- **Docs:** coming soon
+- **Cloud threat feed:** coming soon
+- **Discord:** coming soon
+- **Issues / Feature requests:** [GitHub Issues](https://github.com/dribel792/warden/issues)

@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "warden"
+version = "0.1.0-alpha"
+description = "Authorization, policy enforcement, and threat protection for AI agents with wallets."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+keywords = ["ai", "agents", "security", "authorization", "langchain", "crewai", "policy"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "pyyaml>=6.0",
+    "click>=8.0",
+    "httpx>=0.24",
+    "structlog>=23.0",
+]
+
+[project.optional-dependencies]
+langchain = ["langchain>=0.1.0"]
+crewai = ["crewai>=0.1.0"]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "black",
+    "ruff",
+    "mypy",
+]
+
+[project.scripts]
+agentguard = "agentguard.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/dribel792/warden"
+Issues = "https://github.com/dribel792/warden/issues"
