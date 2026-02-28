@@ -1,0 +1,46 @@
+# Example Warden policy — trading bot
+agent_id: trading-bot-example
+
+permissions:
+  - action: token_transfer
+    constraints:
+      tokens: [USDC, USDT]
+      max_amount_per_tx: 1000
+      approved_recipients:
+        - "0xTreasuryAddress"
+        - "0xApprovedCounterparty"
+
+  - action: swap
+    constraints:
+      approved_dexes: [uniswap, jupiter, curve]
+      max_slippage_bps: 100
+      max_value_usd: 5000
+
+  - action: api_call
+    constraints:
+      allowed_domains:
+        - "*.openai.com"
+        - "*.anthropic.com"
+        - "api.coingecko.com"
+
+budgets:
+  per_transaction: 1000
+  daily: 10000
+  monthly: 100000
+
+escalation:
+  triggers:
+    - amount_above: 5000
+    - recipient_not_in_approved_list: true
+  timeout_minutes: 30
+  timeout_action: deny
+
+schedule:
+  timezone: UTC
+  active_windows:
+    - days: [mon, tue, wed, thu, fri]
+      hours: "07:00-22:00"
+  outside_hours_action: deny
+
+kill_switch:
+  enabled: true

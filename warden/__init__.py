@@ -1,12 +1,15 @@
 # Warden — Authorization layer for AI agents
 # https://github.com/dribel792/warden
-#
-# This package is under active development. Core engine coming in v0.1.
-# Star the repo to follow progress: https://github.com/dribel792/warden
+# MIT License
 
-__version__ = "0.1.0-alpha"
+__version__ = "0.1.0"
 
-# from warden.engine import Warden       # coming soon
-# from warden.middleware.decorator import guard  # coming soon
+from warden.engine import PolicyEngine, Decision
+from warden.middleware.decorator import guard, Warden
 
-__all__ = []
+__all__ = [
+    "PolicyEngine",
+    "Decision",
+    "guard",
+    "Warden",
+]
