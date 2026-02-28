@@ -85,8 +85,13 @@ class ThreatFeedClient:
         """Return the latest pulled threat signatures."""
         return self._signatures
 
+    def flush(self):
+        """Force an immediate telemetry flush (blocks until done)."""
+        self._flush_telemetry()
+
     def stop(self):
         """Gracefully stop background threads."""
+        self.flush()
         self._stopped.set()
 
     # ── Background Threads ────────────────────────────────────────────────────
