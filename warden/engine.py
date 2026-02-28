@@ -376,15 +376,15 @@ class PolicyEngine:
         return None
 
     def _domain_match(self, url: str, pattern: str) -> bool:
-        """Simple domain matching supporting * wildcards."""
+        """Simple domain matching supporting * wildcards (e.g. *.openai.com)."""
         import fnmatch
-        # Extract domain from URL
+        from urllib.parse import urlparse
         try:
-            from urllib.parse import urlparse
             domain = urlparse(url).netloc or url
         except Exception:
             domain = url
-        return fnmatch.fnmatch(domain, pattern.lstrip("*.").replace("*.", "*."))
+        # fnmatch: * matches any string including dots, so *.openai.com matches api.openai.com
+        return fnmatch.fnmatch(domain, pattern)
 
     def _log(self, decision: Decision):
         log = decision.to_dict()
