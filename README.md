@@ -1,10 +1,70 @@
 # Warden
 
-**Authorization, policy enforcement, and threat protection for AI agents with wallets.**
+**Authorization, policy enforcement, and threat protection for AI agents.**
 
 ```bash
 pip install warden
 ```
+
+Warden is an open-source policy engine that sits between your AI agent and its capabilities. Every action — transferring funds, calling APIs, swapping tokens, writing files, sending messages — passes through a local policy engine before it executes. Decisions happen in <1ms with zero network calls. No cloud dependency in your critical path. No black box.
+
+---
+
+## Features
+
+### 🛡️ Action Authorization
+- **Action allowlists** — define exactly which action types an agent is permitted to take. Anything not explicitly allowed is denied.
+- **Per-action constraints** — token allowlists, recipient allowlists/denylists, approved DEXes, allowed API domains, max slippage, and more
+- **Any action type** — financial (transfers, swaps), API calls, file access, database queries, code execution, messaging — if your agent can do it, Warden can gate it
+
+### 💰 Spend Controls
+- **Per-transaction limits** — hard cap on any single action's value
+- **Rolling budget windows** — hourly, daily, and monthly spend limits with automatic enforcement
+- **Multi-token support** — USDC, USDT, ETH, SOL, or any token you define
+
+### ⏰ Operating Boundaries
+- **Schedule enforcement** — restrict agent activity to defined time windows (e.g. Mon–Fri 07:00–22:00 UTC)
+- **Timezone-aware** — configure per timezone, Warden handles the conversion
+- **Outside-hours actions** — deny, deny with alert, or queue for later
+
+### 🚨 Threat Detection
+- **Prompt injection detection** — 18+ known injection patterns matched against every action parameter
+- **Malicious address blocking** — seed library of known drainer contracts, OFAC-sanctioned addresses, and exploit wallets
+- **Attack pattern library** — infinite approval detection, zero-address transfers, high-slippage MEV setups
+- **Offline-capable** — seed library ships with the package, no API call required
+
+### ⚠️ Human-in-the-Loop Escalation
+- **Threshold triggers** — escalate when amount exceeds X, recipient is unknown, or first interaction with a new contract
+- **Approval channels** — Slack, email, or webhook
+- **Timeout handling** — configurable timeout action (deny by default)
+
+### 🔴 Kill Switch
+- **Instant agent shutdown** — one call stops all agent actions immediately
+- **Notifications** — email, Slack, PagerDuty on trigger
+- **Pause vs kill** — pause lets the agent read but not act; kill revokes everything
+
+### 📋 Audit Logging
+- **Structured JSON logs** — every decision logged with action, params, result, reason, check that failed, and latency
+- **CLI audit tool** — `warden audit --log agent.log` summarizes what got blocked and why
+- **SIEM-compatible** — pipe logs to Datadog, Splunk, or any log aggregator
+
+### 🔌 Framework Integrations
+- **LangChain** — `GuardedToolkit` wraps any list of tools in one line
+- **CrewAI** — `GuardedAgent` drop-in replacement for `Agent`
+- **Python decorator** — `@guard(policy="policy.yaml")` works with any function
+- **HTTP proxy** — route all agent traffic through Warden without touching code
+- **Generic SDK** — `Warden.check(action, params)` for custom integrations
+
+### ☁️ Threat Feed (Cloud, optional)
+- **Real-time signature updates** — pull fresh threat patterns from AgentGuard Cloud in the background
+- **Cross-customer intelligence** — attack seen on one agent protects all agents within seconds
+- **Non-blocking** — runs in background threads, never adds latency to authorization decisions
+- **Telemetry** — anonymized behavioral signals sent back to improve the feed (opt-out requires Enterprise)
+
+### ⚡ Performance
+- **<1ms decisions** — all checks run locally, zero network calls on the critical path
+- **No cold start** — policy loaded at init, decisions are pure in-memory evaluation
+- **Thread-safe** — safe to use in concurrent agent environments
 
 ---
 
